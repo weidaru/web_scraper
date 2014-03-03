@@ -18,7 +18,7 @@ func main() {
 	
 	strategy := strategy_imp.CreateStrategy4wandoujia(1000)
 	
-	context := scraper.New(8)
+	context := scraper.New(4)
 	context.Add("http://www.wandoujia.com/apps", strategy)
 	context.Run()
 }

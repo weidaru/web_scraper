@@ -7,8 +7,6 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
-	"math/rand"
-	"time"
 )
 
 type ExtractFunc func(url string, node *html.Node) ([]interface{},bool)
@@ -102,10 +100,6 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 		url_map[url] = true
 		mutex.Unlock()
 		
-		//rand.XXX() uses a global object with a mutex lock which may be slow, so we create a new generator here for each Execution(thread)
-		source := rand.NewSource(time.Now().UnixNano())		
-		generator := rand.New(source)
-		
 		//Start get Body of the html if it really is
 		response, err := http.Get(url)
 		if err != nil {
@@ -145,9 +139,7 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 		
 		new_urls := strategy.Crawl(url, root)
 		
-		for i:=0; i<10; i++ {
-			new_url := new_urls[generator.Int() % len(new_urls)]
-			
+		for _,new_url := range new_urls {
 			mutex.Lock()
 			if !url_map[new_url] {
 				new_state := state.Copy()
