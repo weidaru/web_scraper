@@ -21,7 +21,7 @@ func (d *Downloader) Execute() {
 
 }
 
-func (d *downloader) Resume() {
+func (d *Downloader) Resume() {
 
 }
 

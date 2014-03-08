@@ -83,6 +83,25 @@ func  (s *Scraper) AddWithState(url string, strategy Strategy, state State) {
 	s.mutex.Unlock()
 }
 
+func GetHTMLTree(url string) *html.Node {
+	//Start get Body of the html if it really is
+	response, err := http.Get(url)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	if response.StatusCode != 200 && response.Header.Get("Content-Type") != "text/html" {
+		return nil
+	}
+	tree, err := h5.New(response.Body)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	
+	return tree.Top()
+}
+
 func (s *Scraper) CreateExecution() ExecuteFunc {
 	url_map := map[string]bool{}
 	var mutex sync.Mutex			//mutex to protect url_map
@@ -100,25 +119,13 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 		url_map[url] = true
 		mutex.Unlock()
 		
-		//Start get Body of the html if it really is
-		response, err := http.Get(url)
-		if err != nil {
-			log.Println(err)
-			<-s.work
-			return 
-		}
-		if response.StatusCode != 200 && response.Header.Get("Content-Type") != "text/html" {
-			<-s.work
-			return
-		}
-		tree, err := h5.New(response.Body)
-		if err != nil {
-			log.Println(err)
+		root := GetHTMLTree(url)
+		if root == nil {
 			<-s.work
 			return
 		}
 		
-		root:=tree.Top()
+		//Do extractions
 		extracts, should_stop := strategy.Extract(url, root)
 		for _,v := range extracts {
 			for _,cb := range strategy.Callbacks {
@@ -137,6 +144,7 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 			return
 		}
 		
+		//Do crawling
 		new_urls := strategy.Crawl(url, root)
 		
 		for _,new_url := range new_urls {
