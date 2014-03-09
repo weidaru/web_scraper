@@ -4,49 +4,7 @@ import(
 	"github.com/weidaru/web_scraper/scraper"
 	"strings"
 	"sync"
-	"os"
-	"log"
-	"encoding/xml"
 )
-
-type Log struct {
-	XMLName xml.Name `xml:"log"`
-    Version string   `xml:"version,attr"`
-    Items []Item `xml:"item"`
-}
-
-type Item struct {
-	URL string `xml:"url,attr"`
-}
-
-func CreateDumpCallback(filename string, max_count int) scraper.ExtractCallback {
-	file,err := os.OpenFile(filename, os.O_RDWR | os.O_CREATE, 0666)
-	logxml := &Log{Version:"0.1"}
-	count := 0
-	var mutex sync.Mutex
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-	dump := func(input interface{}) {
-		mutex.Lock()
-		count++
-		if(count >= max_count) {
-			output, err := xml.MarshalIndent(logxml, "  ", "    ")
-			if err != nil {
-				log.Println(err)
-			}else {
-				file.Write(output)
-				file.Close()
-			}
-		}else {
-			url := input.(string)
-			logxml.Items = append(logxml.Items, Item{URL:url})
-		}
-		mutex.Unlock()
-	}
-	return dump
-}
 
 func CreateStrategy4wandoujia(max_count int) scraper.Strategy  {
 	url_map := map[string]bool{}
@@ -73,7 +31,7 @@ func CreateStrategy4wandoujia(max_count int) scraper.Strategy  {
 	strategy := scraper.CreateHrefBasedStrategy(max_count, extract_ref, crawl_href)
 	
 	//Add dump to callback.
-	dump := CreateDumpCallback("log.xml", max_count)
+	dump := scraper.CreateDumpCallback("log.xml", max_count)
 	strategy.Callbacks = append(strategy.Callbacks, dump)
 	
 	return strategy

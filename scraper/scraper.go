@@ -60,13 +60,13 @@ type Scraper struct {
 	mutex sync.Mutex			//to protect items, length of items always increase which makes synchronization easy
 	work chan bool				//work and group are used for thread control
 	group sync.WaitGroup
-	StopFlag int32				//StopFlag is non-0 if stop is requested
+	stop_flag int32				//stop_flag is non-0 if stop is requested
 }
 
 func New(num_thread int) *Scraper {
 	result := new(Scraper)
 	result.work = make(chan bool, num_thread)
-	result.StopFlag = 0
+	result.stop_flag = 0
 	return result
 }
 
@@ -90,7 +90,7 @@ func GetHTMLTree(url string) *html.Node {
 		log.Println(err)
 		return nil
 	}
-	if response.StatusCode != 200 && response.Header.Get("Content-Type") != "text/html" {
+	if response.StatusCode != 200 || response.Header.Get("Content-Type") != "text/html" {
 		return nil
 	}
 	tree, err := h5.New(response.Body)
@@ -133,7 +133,7 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 			}
 		}
 		if should_stop {
-			atomic.AddInt32(&s.StopFlag, 1)
+			atomic.AddInt32(&s.stop_flag, 1)
 			<-s.work
 			return
 		}
@@ -169,7 +169,7 @@ func (s *Scraper) Run() {
 	head := 0
 	var item Item
 	for {
-		if atomic.LoadInt32(&s.StopFlag) != 0 {
+		if atomic.LoadInt32(&s.stop_flag) != 0 {
 			break
 		}
 		var length int

@@ -7,7 +7,52 @@ import(
 	"code.google.com/p/go.net/html"
 	"code.google.com/p/go-html-transform/css/selector"
 	urllib "net/url"
+	"encoding/xml"
+	"os"
+	"sync"
 )
+
+type Log struct {
+	xml_name xml.Name 	`xml:"log"`
+    version string   	`xml:"version,attr"`
+    LogItems []LogItem 		`xml:"LogItem"`
+}
+
+type LogItem struct {
+	url string 			`xml:"url,attr"`
+}
+
+func CreateDumpCallback(filename string, max_count int) ExtractCallback {
+	file,err := os.OpenFile(filename, os.O_RDWR | os.O_CREATE, 0666)
+	logxml := &Log{version:"0.1"}
+	count := 0
+	var mutex sync.Mutex
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	dump := func(input interface{}) {
+		mutex.Lock()
+		count++
+		if(count >= max_count) {
+			output, err := xml.MarshalIndent(logxml, "  ", "    ")
+			if err != nil {
+				log.Println(err)
+			}else {
+				_,err := file.Write(output)
+				if err != nil {
+					log.Println(err)
+				}
+				file.Close()
+			}
+		}else {
+			url := input.(string)
+			logxml.LogItems = append(logxml.LogItems, LogItem{url})
+		}
+		mutex.Unlock()
+	}
+	return dump
+}
 
 func CreateDebugCallbacks() ExtractCallback {
 	var count int32
