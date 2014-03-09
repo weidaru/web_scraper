@@ -13,18 +13,18 @@ import(
 )
 
 type Log struct {
-	xml_name xml.Name 	`xml:"log"`
-    version string   	`xml:"version,attr"`
-    LogItems []LogItem 		`xml:"LogItem"`
+	XMLName xml.Name `xml:"log"`
+    Version string `xml:"version,attr"`
+    LogItems []LogItem `xml:"log_item"`
 }
 
 type LogItem struct {
-	url string 			`xml:"url,attr"`
+	URL string `xml:"url,attr"`
 }
 
 func CreateDumpCallback(filename string, max_count int) ExtractCallback {
 	file,err := os.OpenFile(filename, os.O_RDWR | os.O_CREATE, 0666)
-	logxml := &Log{version:"0.1"}
+	logxml := &Log{Version:"0.1"}
 	count := 0
 	var mutex sync.Mutex
 	if err != nil {
