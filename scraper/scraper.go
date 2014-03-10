@@ -8,12 +8,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"strings"
+	lf "github.com/scryner/lfreequeue"
+	"time"
 )
 
 type ExtractFunc func(url string, node *html.Node) ([]interface{},bool)
 type CrawlFunc func(url string, node *html.Node) []string
 type ExtractCallback func(input interface{})
-type ExecuteFunc func(url string, strategy Strategy, state State)
 
 type Strategy struct {
 	Extract ExtractFunc
@@ -53,21 +54,20 @@ type Item struct {
 	url_ string
 	strategy_ Strategy
 	state_ State
-	Execution ExecuteFunc
 }
 
 type Scraper struct {
-	items []Item				//Better to use a lock free queue
-	mutex sync.Mutex			//to protect items, length of items always increase which makes synchronization easy
-	work chan bool				//work and group are used for thread control
-	group sync.WaitGroup
+	items *lf.Queue				//Better to use a lock free queue
 	stop_flag int32				//stop_flag is non-0 if stop is requested
+	group sync.WaitGroup
+	num_thread int
 }
 
 func New(num_thread int) *Scraper {
 	result := new(Scraper)
-	result.work = make(chan bool, num_thread)
 	result.stop_flag = 0
+	result.items = lf.NewQueue()
+	result.num_thread = num_thread
 	return result
 }
 
@@ -78,13 +78,43 @@ func (s *Scraper) Add(url string, strategy Strategy) {
 
 func  (s *Scraper) AddWithState(url string, strategy Strategy, state State) {
 	item := Item{url_:url, strategy_:strategy, state_:state}
-	item.Execution = s.CreateExecution()
-	s.mutex.Lock()
-	s.items = append(s.items, item)
-	s.mutex.Unlock()
+	s.items.Enqueue(item)
 }
 
-func GetHTMLTree(url string) *html.Node {
+type executeFunc func(url string, strategy Strategy, state State)
+
+func (s *Scraper) Run() {
+	execution := s.createExecution();
+	s.group.Add(s.num_thread)
+	for i:=0; i<s.num_thread; i++ {
+		go s.runWorkThread(execution)
+	}
+
+	s.group.Wait()
+}
+
+//Private
+
+func (s *Scraper) runWorkThread(execution executeFunc) {
+	defer s.group.Done()
+	attempt := 0
+	for {
+		if atomic.LoadInt32(&s.stop_flag) != 0 || attempt > 10 {
+			break
+		}
+		
+		if i,ok := s.items.Dequeue(); ok {
+			item := i.(Item)
+			execution(item.url_, item.strategy_, item.state_)
+			attempt = 0
+		} else {
+			time.Sleep(1000 * time.Millisecond)
+			attempt++
+		}
+	}
+}
+
+func getHTMLTree(url string) *html.Node {
 	//Start get Body of the html if it really is
 	response, err := http.Get(url)
 	if err != nil {
@@ -93,7 +123,7 @@ func GetHTMLTree(url string) *html.Node {
 	}
 	mime := response.Header.Get("Content-Type")
 	if response.StatusCode != 200 || strings.Index(mime, "text/html") == -1 {
-		log.Println("Bad url ", url)
+		log.Println("Bad url ", url , "StatusCode: ", response.StatusCode, "MIME: ", mime)
 		return nil
 	}
 	tree, err := h5.New(response.Body)
@@ -106,27 +136,23 @@ func GetHTMLTree(url string) *html.Node {
 	return tree.Top()
 }
 
-func (s *Scraper) CreateExecution() ExecuteFunc {
+func (s *Scraper) createExecution() executeFunc {
 	url_map := map[string]bool{}
 	var mutex sync.Mutex			//mutex to protect url_map
 		
 	var internal func(string, Strategy, State)
 	internal = func(url string, strategy Strategy, state State) {
-		defer s.group.Done()		//Cannot defer <-s.work? Because it is a channel and can block?
-		
 		mutex.Lock()
 		if url_map[url] == true {
 			mutex.Unlock()
-			<-s.work
 			return 
 		}
 		
 		url_map[url] = true
 		mutex.Unlock()
 		
-		root := GetHTMLTree(url)
+		root := getHTMLTree(url)
 		if root == nil {
-			<-s.work
 			return
 		}
 		
@@ -139,13 +165,11 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 		}
 		if should_stop {
 			atomic.AddInt32(&s.stop_flag, 1)
-			<-s.work
 			return
 		}
 		
 		state.Update()
 		if(state.CheckStop()) {
-			<-s.work
 			return
 		}
 		
@@ -157,44 +181,15 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 			if !url_map[new_url] {
 				new_state := state.Copy()
 
-				i := Item{url_:new_url, strategy_:strategy, state_:new_state, Execution:internal}
-				s.mutex.Lock()
-				s.items = append(s.items, i)
-				s.mutex.Unlock()
+				i := Item{url_:new_url, strategy_:strategy, state_:new_state}
+				s.items.Enqueue(i)
 			}
 			mutex.Unlock()
 		}
-		<-s.work
 	}
 	
 	return internal
 }
-
-func (s *Scraper) Run() {
-	head := 0
-	var item Item
-	for {
-		if atomic.LoadInt32(&s.stop_flag) != 0 {
-			break
-		}
-		var length int
-		s.mutex.Lock()
-		length = len(s.items)
-		s.mutex.Unlock()
-		if head < length {
-			s.work<-true			//Try sending work to see whether there is any empty slot(thread)
-			s.group.Add(1)			//New work in the group
-			s.mutex.Lock()
-			item = s.items[head]	//Copy the item
-			s.mutex.Unlock()
-			go item.Execution(item.url_, item.strategy_, item.state_)
-			head++
-		}
-	}
-	s.group.Wait()
-}
-
-
 
 
 

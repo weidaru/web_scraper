@@ -9,7 +9,7 @@ import (
 func main() {
 	log.SetFlags( log.Ldate | log.Ltime | log.Lshortfile)
 	
-	strategy := strategy_imp.CreateStrategy4wandoujia(5)
+	strategy := strategy_imp.CreateStrategy4wandoujia(1000)
 	
 	context := scraper.New(4)
 	context.Add("http://www.wandoujia.com/apps", strategy)
