@@ -12,6 +12,8 @@ import(
 	"sync"
 )
 
+const LogVersion string = "0.1"			//LogVersion for dump.
+
 type Log struct {
 	XMLName xml.Name `xml:"log"`
     Version string `xml:"version,attr"`
@@ -23,8 +25,8 @@ type LogItem struct {
 }
 
 func CreateDumpCallback(filename string, max_count int) ExtractCallback {
-	file,err := os.OpenFile(filename, os.O_RDWR | os.O_CREATE, 0666)
-	logxml := &Log{Version:"0.1"}
+	file,err := os.OpenFile(filename, os.O_WRONLY  | os.O_CREATE | os.O_TRUNC, 0666)
+	logxml := &Log{Version:LogVersion}
 	count := 0
 	var mutex sync.Mutex
 	if err != nil {
@@ -33,6 +35,8 @@ func CreateDumpCallback(filename string, max_count int) ExtractCallback {
 	}
 	dump := func(input interface{}) {
 		mutex.Lock()
+		url := input.(string)
+		logxml.LogItems = append(logxml.LogItems, LogItem{url})
 		count++
 		if(count >= max_count) {
 			output, err := xml.MarshalIndent(logxml, "  ", "    ")
@@ -45,9 +49,6 @@ func CreateDumpCallback(filename string, max_count int) ExtractCallback {
 				}
 				file.Close()
 			}
-		}else {
-			url := input.(string)
-			logxml.LogItems = append(logxml.LogItems, LogItem{url})
 		}
 		mutex.Unlock()
 	}

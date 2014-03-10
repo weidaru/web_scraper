@@ -226,6 +226,7 @@ func (d *Downloader) HandleDownload(dest_dir string, url string, response *http.
 	temp_path := file_path + TempSuffix
 	save_file, err:= os.Create(temp_path)
 	log.Println("Save to ", file_path)
+	log.Printf("Size: %.2f mb", float32(response.ContentLength)/(1024.0*1024.0))
 	if err!=nil {
 		log.Println("Error")
 		log.Println(err)

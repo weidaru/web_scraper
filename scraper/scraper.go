@@ -7,6 +7,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"strings"
 )
 
 type ExtractFunc func(url string, node *html.Node) ([]interface{},bool)
@@ -90,7 +91,9 @@ func GetHTMLTree(url string) *html.Node {
 		log.Println(err)
 		return nil
 	}
-	if response.StatusCode != 200 || response.Header.Get("Content-Type") != "text/html" {
+	mime := response.Header.Get("Content-Type")
+	if response.StatusCode != 200 || strings.Index(mime, "text/html") == -1 {
+		log.Println("Bad url ", url)
 		return nil
 	}
 	tree, err := h5.New(response.Body)
@@ -98,6 +101,7 @@ func GetHTMLTree(url string) *html.Node {
 		log.Println(err)
 		return nil
 	}
+	
 	
 	return tree.Top()
 }
@@ -109,6 +113,7 @@ func (s *Scraper) CreateExecution() ExecuteFunc {
 	var internal func(string, Strategy, State)
 	internal = func(url string, strategy Strategy, state State) {
 		defer s.group.Done()		//Cannot defer <-s.work? Because it is a channel and can block?
+		
 		mutex.Lock()
 		if url_map[url] == true {
 			mutex.Unlock()
