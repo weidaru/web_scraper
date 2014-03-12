@@ -117,6 +117,9 @@ func CreateSelectorBasedStrategy(ext_sel string, ext_func ExtractNodeFunc, crawl
 		}
 		href_nodes := sel.Find(node)
 		
+		if len(href_nodes) == 0 {
+			return result
+		}
 		for i:=0; i<15; i++ {
 			index := rand.Int() % len(href_nodes)
 			v := href_nodes[index]
